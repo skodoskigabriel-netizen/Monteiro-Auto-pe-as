@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Monteiro Autopeças</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial;
+  background: #0f0f0f;
+  color: #fff;
+}
+
+header {
+  background: #000;
+  padding: 20px;
+  text-align: center;
+  border-bottom: 3px solid #FFD700;
+}
+
+header h1 {
+  color: #FFD700;
+  margin: 0;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  padding: 15px;
+  background: #181818;
+}
+
+input, select {
+  padding: 10px;
+  border-radius: 6px;
+  border: none;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 15px;
+  padding: 20px;
+}
+
+.card {
+  background: #1c1c1c;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #333;
+}
+
+.card img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+}
+
+.card-content {
+  padding: 10px;
+  text-align: center;
+}
+
+.price {
+  color: #FFD700;
+  font-size: 18px;
+  margin: 5px 0;
+}
+
+.btn {
+  background: #FFD700;
+  color: #000;
+  padding: 10px;
+  width: 100%;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.btn:hover {
+  background: #e6c200;
+}
+
+.status {
+  text-align:center;
+  padding:5px;
+  font-size:14px;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>Monteiro Autopeças</h1>
+</header>
+
+<div class="filters">
+  <input id="busca" placeholder="Buscar peça..." onkeyup="render()">
+
+  <select id="marca" onchange="render()">
+    <option value="">Marca</option>
+    <option value="Fiat">Fiat</option>
+    <option value="VW">VW</option>
+    <option value="GM">GM</option>
+  </select>
+
+  <select id="tipo" onchange="render()">
+    <option value="">Tipo</option>
+    <option value="Radiador">Radiador</option>
+    <option value="Painel">Painel</option>
+    <option value="Parachoque">Parachoque</option>
+  </select>
+
+  <select id="ordem" onchange="render()">
+    <option value="">Ordenar</option>
+    <option value="menor">Menor preço</option>
+    <option value="maior">Maior preço</option>
+  </select>
+</div>
+
+<div class="status" id="status"></div>
+
+<div class="grid" id="produtos"></div>
+
+<script>
+
+let lista = [];
+let bloqueio = false;
+
+// 🔥 CARREGAR PRODUTOS
+async function carregar() {
+  try {
+    const res = await fetch("http://localhost:3000/produtos");
+    lista = await res.json();
+    render();
+  } catch (err) {
+    document.getElementById("status").innerText = "Erro ao carregar produtos";
+  }
+}
+
+// 🔎 RENDER
+function render() {
+  let dados = [...lista];
+
+  let busca = document.getElementById("busca").value.toLowerCase();
+  let marca = document.getElementById("marca").value;
+  let tipo = document.getElementById("tipo").value;
+  let ordem = document.getElementById("ordem").value;
+
+  if (busca) dados = dados.filter(p => p.nome.toLowerCase().includes(busca));
+  if (marca) dados = dados.filter(p => p.marca === marca);
+  if (tipo) dados = dados.filter(p => p.tipo === tipo);
+
+  if (ordem === "menor") dados.sort((a,b) => a.preco - b.preco);
+  if (ordem === "maior") dados.sort((a,b) => b.preco - a.preco);
+
+  let html = "";
+
+  dados.forEach(p => {
+    html += `
+      <div class="card">
+        <img src="http://localhost:3000${p.imagem}">
+        <div class="card-content">
+          <h3>${p.nome}</h3>
+          <div class="price">R$ ${p.preco}</div>
+
+          <button class="btn" onclick="comprar('${p.id}','${p.nome}','${p.preco}','${p.marca}','${p.tipo}')">
+            Comprar no WhatsApp
+          </button>
+        </div>
+      </div>
+    `;
+  });
+
+  document.getElementById("produtos").innerHTML = html;
+}
+
+// 🔥 COMPRA + VENDA REAL
+async function comprar(id, nome, preco, marca, tipo) {
+
+  if (bloqueio) return;
+  bloqueio = true;
+
+  document.getElementById("status").innerText = "Registrando compra...";
+
+  try {
+    await fetch("http://localhost:3000/vendas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        produto_id: id,
+        nome,
+        preco
+      })
+    });
+
+    document.getElementById("status").innerText = "Compra registrada!";
+
+  } catch (err) {
+    document.getElementById("status").innerText = "Erro ao registrar venda";
+  }
+
+  const msg = encodeURIComponent(
+`🚗 Monteiro Autopeças
+
+📦 Produto: ${nome}
+🏷 Marca: ${marca}
+⚙ Tipo: ${tipo}
+💰 Preço: R$ ${preco}
+🆔 Código: ${id}`
+  );
+
+  window.open(`https://wa.me/5541997505127?text=${msg}`, "_blank");
+
+  setTimeout(() => {
+    bloqueio = false;
+    document.getElementById("status").innerText = "";
+  }, 2000);
+}
+
+carregar();
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard - Monteiro Autopeças</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial;
+  background: #0d0d0d;
+  color: #fff;
+  display: flex;
+}
+
+.sidebar {
+  width: 220px;
+  background: #000;
+  height: 100vh;
+  padding: 20px;
+  border-right: 2px solid #FFD700;
+}
+
+.sidebar h2 {
+  color: #FFD700;
+}
+
+.sidebar button {
+  width: 100%;
+  margin: 10px 0;
+  padding: 10px;
+  background: #111;
+  border: 1px solid #333;
+  color: #fff;
+  cursor: pointer;
+}
+
+.main {
+  flex: 1;
+  padding: 20px;
+}
+
+.card {
+  background: #1c1c1c;
+  padding: 15px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+input {
+  display: block;
+  margin: 8px 0;
+  padding: 10px;
+  width: 300px;
+}
+
+.produto {
+  background: #1c1c1c;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.btn-del {
+  background: red;
+  color: white;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.btn-edit {
+  background: orange;
+  color: white;
+  border: none;
+  padding: 8px;
+  margin-right: 5px;
+  cursor: pointer;
+}
+
+/* MODAL */
+#modal {
+  display:none;
+  position:fixed;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  background:#000000cc;
+}
+
+.modal-box {
+  background:#1c1c1c;
+  padding:20px;
+  width:320px;
+  margin:100px auto;
+  border-radius:10px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="sidebar">
+  <h2>Autopeças</h2>
+
+  <button onclick="mostrar('dashboard')">Dashboard</button>
+  <button onclick="mostrar('add')">Adicionar Produto</button>
+  <button onclick="mostrar('lista')">Produtos</button>
+  <button onclick="logout()">Sair</button>
+</div>
+
+<div class="main">
+
+  <!-- DASHBOARD -->
+  <div id="dashboard">
+    <h1>Dashboard</h1>
+
+    <div class="card">
+      <h3>Total de Produtos: <span id="totalProdutos">0</span></h3>
+    </div>
+
+    <div class="card">
+      <canvas id="grafico"></canvas>
+    </div>
+  </div>
+
+  <!-- ADD -->
+  <div id="add" style="display:none;">
+    <h2>Adicionar Produto</h2>
+
+    <input id="nome" placeholder="Nome">
+    <input id="preco" placeholder="Preço">
+    <input id="marca" placeholder="Marca">
+    <input id="tipo" placeholder="Tipo">
+    <input type="file" id="imagem">
+
+    <button onclick="salvar()">Salvar</button>
+  </div>
+
+  <!-- LISTA -->
+  <div id="lista" style="display:none;">
+    <h2>Produtos</h2>
+    <div id="produtos"></div>
+  </div>
+
+</div>
+
+<!-- MODAL -->
+<div id="modal">
+  <div class="modal-box">
+    <h3>Editar Produto</h3>
+
+    <input id="eid" type="hidden">
+    <input id="enome" placeholder="Nome">
+    <input id="epreco" placeholder="Preço">
+    <input id="emarca" placeholder="Marca">
+    <input id="etipo" placeholder="Tipo">
+    <input type="file" id="eimagem">
+
+    <button onclick="salvarEdicao()">Salvar</button>
+    <button onclick="fecharModal()">Fechar</button>
+  </div>
+</div>
+
+<script>
+
+// 🔐 login token correto
+if (!localStorage.getItem("token")) {
+  window.location.href = "login.html";
+}
+
+let produtos = [];
+let chart = null;
+
+// navegação
+function mostrar(tela) {
+  document.getElementById("dashboard").style.display = "none";
+  document.getElementById("add").style.display = "none";
+  document.getElementById("lista").style.display = "none";
+
+  document.getElementById(tela).style.display = "block";
+}
+
+// carregar produtos
+async function carregar() {
+  const res = await fetch("http://localhost:3000/produtos");
+  produtos = await res.json();
+
+  document.getElementById("totalProdutos").innerText = produtos.length;
+
+  let html = "";
+
+  produtos.forEach(p => {
+    html += `
+      <div class="produto">
+        <div>
+          <b>${p.nome}</b> - R$ ${p.preco}
+        </div>
+
+        <div>
+          <button class="btn-edit"
+            onclick="editar(${p.id}, '${p.nome}', '${p.preco}', '${p.marca}', '${p.tipo}')">
+            Editar
+          </button>
+
+          <button class="btn-del" onclick="deletar(${p.id})">
+            Deletar
+          </button>
+        </div>
+      </div>
+    `;
+  });
+
+  document.getElementById("produtos").innerHTML = html;
+
+  carregarGrafico();
+}
+
+// salvar produto
+async function salvar() {
+  const formData = new FormData();
+
+  formData.append("nome", nome.value);
+  formData.append("preco", preco.value);
+  formData.append("marca", marca.value);
+  formData.append("tipo", tipo.value);
+  formData.append("imagem", imagem.files[0]);
+
+  await fetch("http://localhost:3000/produtos", {
+    method: "POST",
+    headers: {
+      Authorization: localStorage.getItem("token")
+    },
+    body: formData
+  });
+
+  alert("Produto salvo!");
+  carregar();
+}
+
+// editar
+function editar(id, nomeP, precoP, marcaP, tipoP) {
+  eid.value = id;
+  enome.value = nomeP;
+  epreco.value = precoP;
+  emarca.value = marcaP;
+  etipo.value = tipoP;
+
+  modal.style.display = "block";
+}
+
+// salvar edição
+async function salvarEdicao() {
+  const formData = new FormData();
+
+  formData.append("nome", enome.value);
+  formData.append("preco", epreco.value);
+  formData.append("marca", emarca.value);
+  formData.append("tipo", etipo.value);
+
+  if (eimagem.files[0]) {
+    formData.append("imagem", eimagem.files[0]);
+  }
+
+  await fetch(`http://localhost:3000/produtos/${eid.value}`, {
+    method: "PUT",
+    headers: {
+      Authorization: localStorage.getItem("token")
+    },
+    body: formData
+  });
+
+  fecharModal();
+  carregar();
+}
+
+function fecharModal() {
+  modal.style.display = "none";
+}
+
+// deletar
+async function deletar(id) {
+  await fetch(`http://localhost:3000/produtos/${id}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: localStorage.getItem("token")
+    }
+  });
+
+  carregar();
+}
+
+// 📊 GRÁFICO REAL (VENDAS DO BANCO)
+async function carregarGrafico() {
+  const res = await fetch("http://localhost:3000/vendas");
+  const vendas = await res.json();
+
+  let dias = {
+    "Dom": 0,
+    "Seg": 0,
+    "Ter": 0,
+    "Qua": 0,
+    "Qui": 0,
+    "Sex": 0,
+    "Sab": 0
+  };
+
+  vendas.forEach(v => {
+    const d = new Date(v.data);
+    const mapa = ["Dom","Seg","Ter","Qua","Qui","Sex","Sab"];
+    dias[mapa[d.getDay()]]++;
+  });
+
+  if (chart) chart.destroy();
+
+  chart = new Chart(document.getElementById("grafico"), {
+    type: "bar",
+    data: {
+      labels: Object.keys(dias),
+      datasets: [{
+        label: "Vendas reais",
+        data: Object.values(dias),
+        backgroundColor: "#FFD700"
+      }]
+    }
+  });
+}
+
+// logout
+function logout() {
+  localStorage.removeItem("token");
+  window.location.href = "login.html";
+}
+
+carregar();
+
+</script>
+
+</body>
+</html>
